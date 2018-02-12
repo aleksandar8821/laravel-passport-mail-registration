@@ -17,8 +17,9 @@ Route::middleware('auth:api')->get('/user', function (Request $request) {
     return $request->user();
 });
 
-Route::get('/galleries', 'GalleryController@index')->middleware('auth:api');
+// Route::get('/galleries', 'GalleryController@index')->middleware('auth:api');
 
+Route::get('/galleries', 'GalleryController@index');
 
 Route::post('/login', 'LoginController@authenticate');
 Route::post('/register', 'RegisterController@register');

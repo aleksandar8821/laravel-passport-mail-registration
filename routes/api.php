@@ -23,3 +23,5 @@ Route::get('/galleries', 'GalleryController@index');
 
 Route::post('/login', 'LoginController@authenticate');
 Route::post('/register', 'RegisterController@register');
+
+Route::patch('/register/verify', 'RegisterController@verify');

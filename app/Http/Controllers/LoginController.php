@@ -22,7 +22,7 @@ class LoginController extends Controller
 
         if($user && (\Hash::check($request->password, $user->password))){
             if($user->verified === 1){
-                Auth::login($user);
+                Auth::login($user, true);
                 $logedUser = Auth::user();
 
                 $token =  $logedUser->createToken('Login token')->accessToken;

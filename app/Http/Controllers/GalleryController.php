@@ -1,5 +1,4 @@
 <?php
-
 namespace App\Http\Controllers;
 
 use App\Gallery;
@@ -13,8 +12,8 @@ class GalleryController extends Controller
      * @return \Illuminate\Http\Response
      */
     public function index()
-    {
-        $galleries = Gallery::with(['user'])->latest()->get();
+    {   
+        $galleries = Gallery::with(['user', 'images'])->latest()->get();
         return $galleries;
     }
 
@@ -35,8 +34,55 @@ class GalleryController extends Controller
      * @return \Illuminate\Http\Response
      */
     public function store(Request $request)
-    {
-        //
+    {   
+        $path = public_path('uploaded-images/');
+        $message = '';
+
+      if (isset($_FILES['selectedImage'])) {
+        $originalName = $_FILES['selectedImage']['name'];
+        $ext = '.'.pathinfo($originalName, PATHINFO_EXTENSION);
+        $generatedName = md5($_FILES['selectedImage']['tmp_name']).$ext;
+        $filePath = $path.$generatedName;
+        
+        if (!is_writable($path)) {
+          $message =  json_encode(array(
+            'status' => false,
+            'msg'    => 'Destination directory not writable.'
+          ));
+        }
+
+        if (move_uploaded_file($_FILES['selectedImage']['tmp_name'], $filePath)) {
+          $message = json_encode(array(
+            'status'        => true,
+            'originalName'  => $originalName,
+            'generatedName' => $generatedName
+          ));
+        }
+      }
+      else {
+        $message = json_encode(
+          array('status' => false, 'msg' => 'No file uploaded.')
+        );
+      }
+
+        $uploadedImagesFolder = 'http://127.0.0.1:8000/uploaded-images/';
+
+        $gallery = Gallery::create([
+            'name' => $request->input('name'),
+            'description' => $request->input('descriptionGallery'),
+            'user_id' => \Auth::user()->id
+        ]);
+
+        $image = $gallery->images()->create([
+            'url' => $uploadedImagesFolder.$generatedName,
+            'description' => $request->input('descriptionImage')
+        ]);
+
+        
+        // $error = $_FILES['selectedImage']['error'];
+        // return response()->json(compact('error'));
+        return $message;
+    
     }
 
     /**

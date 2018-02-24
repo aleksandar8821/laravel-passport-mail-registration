@@ -51,6 +51,7 @@ class RegisterController extends Controller
         if($user){
             // $user->verified = 1;
             // $user->verify_token = NULL;
+            // $user->save();
             // MOZE SE URADITI I OVAKO:
             $user->update(['verified'=>1, 'verify_token'=>NULL]);
             $userName = $user->first_name;

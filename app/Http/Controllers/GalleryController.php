@@ -38,6 +38,12 @@ class GalleryController extends Controller
         $path = public_path('uploaded-images/');
         $message = '';
 
+        // Uploadovani file je ipak dostupan u $request promenljivoj, moze mu se pristupiti sa $request->file('selectedImage'), a kao sto vidis mozes uraditi i validaciju:
+        $isImage = $request->validate([
+            'selectedImage' => 'image'
+        ]);
+
+        // Iako sam otkrio da je uploadovani file ipak dostupan u $request promenljivoj (moze mu se pristupiti sa $request->file('selectedImage')), sam upload fajla je zasad ostao u plain PHP formi:
       if (isset($_FILES['selectedImage'])) {
         $originalName = $_FILES['selectedImage']['name'];
         $ext = '.'.pathinfo($originalName, PATHINFO_EXTENSION);
@@ -80,8 +86,9 @@ class GalleryController extends Controller
 
         
         // $error = $_FILES['selectedImage']['error'];
-        // return response()->json(compact('error'));
-        return $message;
+        // $slika = $request->file('selectedImage'); //UPLOADOVANI FAJL JE IPAK DOSTUPAN NA OVAJ NACIN! 
+        // return response()->json(compact('slika'));
+        return $message;    
     
     }
 

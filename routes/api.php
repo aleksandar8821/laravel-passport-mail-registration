@@ -30,6 +30,7 @@ Route::get('/galleries', 'GalleryController@index');
 
 //Pazi, tebi je autentifikovani user, dostupan ocigledno u onim api rutama sa middlewareom, dok u onim gde ga nemas, nece biti ocigledno ni pokrenuta sesija sa ulogovanim userom!!!
 Route::post('/galleries', 'GalleryController@store')->middleware('auth:api');
+Route::post('/galleries_multiple_images', 'GalleryController@store_multiple_images')->middleware('auth:api');
 
 Route::post('/login', 'LoginController@authenticate');
 Route::post('/register', 'RegisterController@register');

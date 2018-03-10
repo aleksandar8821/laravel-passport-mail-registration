@@ -17,7 +17,7 @@ class CreateImagesTable extends Migration
               $table->engine = 'InnoDB';
               $table->increments('id');
               $table->string('url');
-              $table->string('description');
+              $table->text('description')->nullable();
               $table->unsignedInteger('gallery_id');
               $table->foreign('gallery_id')->references('id')->on('galleries')->onDelete('cascade');
               $table->timestamps();

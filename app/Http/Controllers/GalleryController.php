@@ -27,6 +27,23 @@ class GalleryController extends Controller
         //
     }
 
+    public function get_clean_microtimestamp_string() {
+        //Get raw microtime (with spaces and dots and digits)
+        $mt = microtime();
+        
+        //Remove all non-digit (or non-integer) characters
+        $r = "";
+        $length = strlen($mt);
+        for($i = 0; $i < $length; $i++) {
+            if(ctype_digit($mt[$i])) {
+                $r .= $mt[$i];
+            }
+        }
+        
+        //Return
+        return $r;
+    }
+
     /**
      * Store a newly created resource in storage.
      *
@@ -90,6 +107,67 @@ class GalleryController extends Controller
         // return response()->json(compact('slika'));
         return $message;    
     
+    }
+
+    public function store_multiple_images(Request $request){
+        
+        $request->validate([
+            'name' => 'required|min:2|unique:galleries',
+            'selectedImagesFiles' => 'required',
+            'selectedImagesFiles.*' => 'image'
+        ]);
+
+        $imageFiles = $request->file('selectedImagesFiles');
+        $imagesDescriptions = $request->input('selectedImagesDescriptions');
+        $uploadedImagesFolder = 'http://127.0.0.1:8000/uploaded-images/';
+
+        /*foreach($imageFiles as $image){
+            $originalName = $image->getClientOriginalName();
+            //ekstenzija mi zapravo i ne treba, jer getClientOriginalName ocigledno uzima i ekstenziju, al dobro je da ti ostane tu i ova funkcija da znas da postoji i kako se zove
+            $extension = $image->getClientOriginalExtension();
+            $generatedName = $this->get_clean_microtimestamp_string().str_random(30).'_'.$originalName;
+            $image->move(public_path('uploaded-images/'), $generatedName);
+        }*/
+
+               
+        $gallery = Gallery::create([
+            'name' => $request->input('name'),
+            'description' => $request->input('descriptionGallery'),
+            'user_id' => \Auth::user()->id
+        ]);
+        
+
+        // $gallery = new Gallery;
+        // $gallery->name = $request->input('name');
+        // if($request->input('descriptionGallery') === 'null'){
+        //     $gallery->description = null;
+        // }else{
+        //     $gallery->description = $request->input('descriptionGallery');
+        // }
+        // $gallery->user_id = \Auth::user()->id;
+        // $gallery->save();
+
+        for ($i=0; $i < count($imageFiles); $i++) { 
+            $originalName = $imageFiles[$i]->getClientOriginalName();
+            //ekstenzija mi zapravo i ne treba, jer getClientOriginalName ocigledno uzima i ekstenziju, al dobro je da ti ostane tu i ova funkcija da znas da postoji i kako se zove
+            $extension = $imageFiles[$i]->getClientOriginalExtension();
+            $generatedName = $this->get_clean_microtimestamp_string().str_random(30).'_'.$originalName;
+            $imageFiles[$i]->move(public_path('uploaded-images/'.$gallery->id.'/'), $generatedName);
+
+         
+            $gallery->images()->create([
+                'url' => $uploadedImagesFolder.$gallery->id.'/'.$generatedName,
+                'description' => $imagesDescriptions[$i]
+            ]);
+            
+
+            
+        }
+
+        // return $_FILES;
+        // $desc = $request->file('selectedImagesFiles');
+        // $desc = microtime(true);
+        return response()->json(compact('imagesDescriptions'));
     }
 
     /**

@@ -18,6 +18,7 @@ class CreateImagesTable extends Migration
               $table->increments('id');
               $table->string('url');
               $table->text('description')->nullable();
+              $table->boolean('vertical')->default(false);
               $table->unsignedInteger('gallery_id');
               $table->foreign('gallery_id')->references('id')->on('galleries')->onDelete('cascade');
               $table->timestamps();

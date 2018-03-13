@@ -14,6 +14,12 @@ class GalleryController extends Controller
     public function index()
     {   
         $galleries = Gallery::with(['user', 'images'])->latest()->get();
+
+        // Nazalost ovo ne radi kad hoces da vratis samo pet prvih slika iz galerije jbg... Vidi https://github.com/laravel/framework/issues/4835 , inace za upit kucas u google laravel Constraining Eager Loads limit not working
+        // $galleries = Gallery::with(['user', 'images' => function($query){
+        //    $query->offset(0)->limit(5);
+        // }])->latest()->get();
+
         return $galleries;
     }
 
@@ -119,6 +125,7 @@ class GalleryController extends Controller
 
         $imageFiles = $request->file('selectedImagesFiles');
         $imagesDescriptions = $request->input('selectedImagesDescriptions');
+        $imagesVerticalInfo = $request->input('selectedImagesVerticalInfo');
         $uploadedImagesFolder = 'http://127.0.0.1:8000/uploaded-images/';
 
         /*foreach($imageFiles as $image){
@@ -157,7 +164,8 @@ class GalleryController extends Controller
          
             $gallery->images()->create([
                 'url' => $uploadedImagesFolder.$gallery->id.'/'.$generatedName,
-                'description' => $imagesDescriptions[$i]
+                'description' => $imagesDescriptions[$i],
+                'vertical' => intval($imagesVerticalInfo[$i])
             ]);
             
 
@@ -167,7 +175,8 @@ class GalleryController extends Controller
         // return $_FILES;
         // $desc = $request->file('selectedImagesFiles');
         // $desc = microtime(true);
-        return response()->json(compact('imagesDescriptions'));
+        $pera = intval($imagesVerticalInfo[0]);
+        return response()->json(compact('pera'));
     }
 
     /**

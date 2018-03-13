@@ -8,7 +8,7 @@ class Image extends Model
 {
 
 		protected $fillable = [
-		    'url', 'description',
+		    'url', 'description', 'vertical'
 		];
 
     public function gallery()

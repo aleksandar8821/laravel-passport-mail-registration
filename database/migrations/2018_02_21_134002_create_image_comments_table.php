@@ -14,6 +14,7 @@ class CreateImageCommentsTable extends Migration
     public function up()
     {
         Schema::create('image_comments', function (Blueprint $table) {
+            $table->engine = 'InnoDB';
             $table->increments('id');
             $table->timestamps();
         });

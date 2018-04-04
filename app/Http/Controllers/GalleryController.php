@@ -20,6 +20,13 @@ class GalleryController extends Controller
         //    $query->offset(0)->limit(5);
         // }])->latest()->get();
 
+        // MOGUCE JE URADITI MULTIPLE WITH SA ELOQUENTOM!!! /***UPRAVO SKONTAO DA JE MNOGO JEDNOSTAVNIJE ZA OVAKO NESTO KORISTITI NESTED EAGER LOADING!***/
+        // $galleries = Gallery::with(['user', 'images' => function($query){
+        //    $query->with('comments'); //evo ti drugi with
+        // }, 'comments'])->latest()->get();
+        // ISTO OVO SA NESTED EAGER LOADING:
+        // $galleries = Gallery::with(['user', 'images.comments', comments'])->latest()->get();
+
         return $galleries;
     }
 
@@ -126,6 +133,7 @@ class GalleryController extends Controller
         $imageFiles = $request->file('selectedImagesFiles');
         $imagesDescriptions = $request->input('selectedImagesDescriptions');
         $imagesVerticalInfo = $request->input('selectedImagesVerticalInfo');
+        // $imagesHeightWidthRatio = $request->input('selectedImagesHeightWidthRatio');
         $uploadedImagesFolder = 'http://127.0.0.1:8000/uploaded-images/';
 
         /*foreach($imageFiles as $image){
@@ -154,6 +162,8 @@ class GalleryController extends Controller
         // $gallery->user_id = \Auth::user()->id;
         // $gallery->save();
 
+
+        // za razliku od prethodne metode store() gde je upload slike radjen u plain php-u, ovde je skoro sve radjeno sa laravelovim metodama
         for ($i=0; $i < count($imageFiles); $i++) { 
             $originalName = $imageFiles[$i]->getClientOriginalName();
             //ekstenzija mi zapravo i ne treba, jer getClientOriginalName ocigledno uzima i ekstenziju, al dobro je da ti ostane tu i ova funkcija da znas da postoji i kako se zove
@@ -185,9 +195,10 @@ class GalleryController extends Controller
      * @param  \App\Gallery  $gallery
      * @return \Illuminate\Http\Response
      */
-    public function show(Gallery $gallery)
+    public function show($id)
     {
-        //
+        $gallery = Gallery::with(['user', 'images.comments.user', 'comments.user'])->find($id);
+        return $gallery;
     }
 
     /**

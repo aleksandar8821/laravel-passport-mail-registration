@@ -36,6 +36,8 @@ Route::post('/gallery_comment', 'GalleryCommentController@store')->middleware('a
 Route::delete('/gallery_comment/{id}', 'GalleryCommentController@destroy')->middleware('auth:api');
 
 Route::post('/login', 'LoginController@authenticate');
+Route::post('/forgot_password', 'PasswordResetController@forgotPasswordRequest');
+Route::post('/password-reset', 'PasswordResetController@resetPassword');
 Route::post('/register', 'RegisterController@register');
 
 Route::patch('/register/verify', 'RegisterController@verify');

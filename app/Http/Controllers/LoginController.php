@@ -9,6 +9,9 @@ use Illuminate\Support\Facades\Auth;
 
 class LoginController extends Controller
 {
+
+    // hmmm, da, kao sto vidis ni u vivify nije radjena logout metoda, tako da valjda ne treba https://gitlab.com/vivify-ideas/vivifyacademy-api-be/blob/master/app/Http/Controllers/Auth/LoginController.php
+
     public function authenticate(Request $request)
     {
      /*

@@ -12,6 +12,10 @@ class ImageComment extends Model
 
 	use unixTimestampFromDate;
 
+	protected $fillable = [
+      'comment_body', 'user_id', 'image_id'
+  ];
+
 		public function image()
 		{
 			return $this->belongsTo(Image::class);

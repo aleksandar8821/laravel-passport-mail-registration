@@ -35,6 +35,9 @@ Route::post('/galleries_multiple_images', 'GalleryController@store_multiple_imag
 Route::post('/gallery_comment', 'GalleryCommentController@store')->middleware('auth:api');
 Route::delete('/gallery_comment/{id}', 'GalleryCommentController@destroy')->middleware('auth:api');
 
+Route::post('/image_comment', 'ImageCommentController@store')->middleware('auth:api');
+Route::delete('/image_comment/{id}', 'ImageCommentController@destroy')->middleware('auth:api');
+
 Route::post('/login', 'LoginController@authenticate');
 Route::post('/forgot_password', 'PasswordResetController@forgotPasswordRequest');
 Route::post('/password-reset', 'PasswordResetController@resetPassword');

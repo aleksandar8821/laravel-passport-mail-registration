@@ -40,6 +40,8 @@ class GalleryController extends Controller
         //
     }
 
+    //  microtime() metoda u php-u je korisna kad hoces da pravis unique stringove, jedino sto je zajebano je sto ona ne vraca string od uzastopnih brojeva, vec tu ima i razmaka i tacaka, a to bas i pozeljno kad pravis unique stringove, a resenje za taj problem sam nasao ovde:  http://softkube.com/blog/generating-unique-microseconds-granular-timestamps-php (downloadovano > file: Generating Unique Microseconds Granular Timestamps with PHP _ SOFTKUBE) + PS vazno( http://php.net/manual/en/function.microtime.php ): microtime() returns the current Unix timestamp with microseconds. This function is only available on operating systems that support the gettimeofday() system call. Ovo koliko vidim ne vazi za time() funkciju, ona je izgleda svugde dostupna... (http://php.net/manual/en/function.time.php)
+
     public function get_clean_microtimestamp_string() {
         //Get raw microtime (with spaces and dots and digits)
         $mt = microtime();

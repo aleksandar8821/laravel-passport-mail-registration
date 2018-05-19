@@ -42,5 +42,6 @@ Route::post('/login', 'LoginController@authenticate');
 Route::post('/forgot_password', 'PasswordResetController@forgotPasswordRequest');
 Route::post('/password-reset', 'PasswordResetController@resetPassword');
 Route::post('/register', 'RegisterController@register');
+Route::post('/register_with_profile_image', 'RegisterController@registerWithProfileImage');
 
 Route::patch('/register/verify', 'RegisterController@verify');

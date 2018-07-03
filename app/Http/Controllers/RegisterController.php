@@ -140,8 +140,9 @@ class RegisterController extends Controller
             // Ovde prvo stavljam not_in pa unique da mi ne vraca gresku email has been taken, ako je korisnik uneo istu vrednost svog maila
             'email' => 'sometimes|required|email|not_in:'.$loggedUser->email.'|unique:users',
             'password' => ['sometimes', 'required', 'min:8', 'regex:~[0-9]~', 'confirmed'],
-            // Ovaj required_with znaci da ovo polje mora biti prisutno samo ako je i password polje prisutno, pa mu onda i ne moras stavljati onaj sometimes, mada msm da moze i ovako i onako. Zapravo, sa sometimes i required u paru mu zapravo kazes da ako postoji ovo polje u requestu ono ne moze da bude prazno, a sa required_with:password mu kazes da ukoliko postoji password polje, mora postojati i on sam i ne moze biti prazan. Msm jebavanje cisto, stavljaj sta oces, cisto da vidis da mozes oba. 
-            'password_confirmation' => ['required_with:password', 'min:8', 'regex:~[0-9]~'],
+            'password_confirmation' => ['sometimes', 'required', 'min:8', 'regex:~[0-9]~'],
+            // Ovaj required_with znaci da ovo polje mora biti prisutno samo ako je i neko od navedenih polja prisutno. 
+            'reentered_password' => ['required_with:first_name, last_name, email, password, password_confirmation'],
             // Nazalos base64 string (format u kojem se nalazi kropovana slika) se ne tretira kao image tako da ova validacija ne prolazi
             // 'profile_image' => 'image'
             // Umesto nje stavljam ovo (Ovo je validacija pomocu takozvanih Rules, to imas najlepse objasnjeno ovde https://laracasts.com/series/whats-new-in-laravel-5-5/episodes/7 , a imas i u dokumentaciji):
@@ -150,7 +151,14 @@ class RegisterController extends Controller
         ], [
             // Ovde ti ovaj :attribute oznacava ime polja nad kojim se vrsi validacija. Spisak ovakvih stvari nisam nasao, ali na dokumentaciji za validaciju, imas primere u poglavlju (valjda su smatrali da su te info dovoljne) https://laravel.com/docs/5.6/validation#working-with-error-messages pa samo trazi niz $messages sa porukama. PS postoji nesto od ovoga i u fajlu resources/lang/en/validation.php
             'not_in' => 'You cannot enter the same value for :attribute.'
-        ])->validate();//Kolko sam skontao iz dokumentacije ovaj validate() na kraju se navodi da bi iskoristio osobine te metode, a to je ili da automatski radi redirekciju na home kad koristis laravel i kao frontend, a kad ga koristis samo kao api, u tom slucaju ova funkcija automatski vraca error poruke u vidu JSON-a 
+        ])->validate();//Kolko sam skontao iz dokumentacije ovaj validate() na kraju se navodi da bi iskoristio osobine te metode, a to je ili da automatski radi redirekciju na home kad koristis laravel i kao frontend, a kad ga koristis samo kao api, u tom slucaju ova funkcija automatski vraca error poruke u vidu JSON-a
+
+        if($request->reentered_password){
+            // Ovo se msm ne moze uraditi u unutar validacije, pa radim ovako posebno. Hteo sam sa "in" pravilom unutar validacije ovo da resim (in validira polje ukoliko je ono jednako nekoj vrednosti), ali ovo je nemoguce uraditi zato sto se hashovane sifre iz baze ne mogu vracati nikad u prvobitno stanje (https://laracasts.com/discuss/channels/laravel/how-to-decrypt-hash-password-in-laravel?page=1), pa zbog toga i ne mozes da uporedis sifre preko "in" pravila. Umesto toga koristi se \Hash::check, a objasnjenja za to pogledaj u login kontroleru u funkciji authenticate.
+            if(!\Hash::check($request->reentered_password, $loggedUser->password)){
+                return response()->json(['error'=>'You provided invalid password!'], 401);
+            }
+        } 
 
         // Pomocu ovoga ces pokupiti sve inpute, da bi kasnije kroz njih iterirao. Ovo je potrebno jer se unutar $request nalaze i neki drugi podaci, ovako izdvajam samo inpute, odnosno polja forme
         // $requestInputData = $request->all();

@@ -48,5 +48,9 @@ Route::get('/get_user_info', 'RegisterController@getUserInfo')->middleware('auth
 // U zavisnosti od toga da li su promenjeni samo neki podaci o useru ili svi podaci(doduse bukvalno sva polja iz baze se nece ovde nikada menjati, jer postoje i polja kao sto su verified, zatim tokeni i sl, al nema veze, to mozda i nije bitno, ne znam), koriste se metode patch i put respektivno. Razliku izmedju put i patch requesta vidi ovde https://www.youtube.com/watch?v=-eo3OEW6z1Q (downloadovano), https://laracasts.com/discuss/channels/general-discussion/whats-the-differences-between-put-and-patch?page=1
 Route::patch('/update_user_data', 'RegisterController@updateUserData')->middleware('auth:api');
 Route::put('/update_user_data', 'RegisterController@updateUserData')->middleware('auth:api');
+Route::post('/update_user_data_mail_conf', 'RegisterController@updateUserDataWithMailConfirmation')->middleware('auth:api');
+Route::patch('/update_user_data_mail_conf/verify', 'RegisterController@verifyUserUpdate');
+Route::patch('/update_user_data_mail_conf/block_revoke_changes', 'RegisterController@blockRevokeChanges');
+
 
 Route::patch('/register/verify', 'RegisterController@verify');

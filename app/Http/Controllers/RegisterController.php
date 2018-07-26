@@ -4,8 +4,14 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\User;
+use App\UserUpdate;
+use App\UserDataVersion;
 use App\Mail\RegisterVerification;
+use App\Mail\UserUpdateCurrentEmailStyled;
+use App\Mail\UserUpdateNewEmailStyled;
+use App\Mail\UserUpdateOldEmailStyled;
 use App\Rules\IsBase64Png;
+use Illuminate\Support\Facades\DB;
 
 class RegisterController extends Controller
 {
@@ -114,9 +120,19 @@ class RegisterController extends Controller
         return $loggedUser;
     }
 
+    // Ovo je metoda koja updateuje usera, ali bez mail confirmationa i radi savrseno
     public function updateUserData(Request $request)
     {
         $loggedUser = \Auth::user();
+
+        if($request->reentered_password){
+            // Ovo se msm ne moze uraditi u unutar validacije, pa radim ovako posebno. Hteo sam sa "in" pravilom unutar validacije ovo da resim (in validira polje ukoliko je ono jednako nekoj vrednosti), ali ovo je nemoguce uraditi zato sto se hashovane sifre iz baze ne mogu vracati nikad u prvobitno stanje (https://laracasts.com/discuss/channels/laravel/how-to-decrypt-hash-password-in-laravel?page=1), pa zbog toga i ne mozes da uporedis sifre preko "in" pravila. Umesto toga koristi se \Hash::check, a objasnjenja za to pogledaj u login kontroleru u funkciji authenticate.
+            if(!\Hash::check($request->reentered_password, $loggedUser->password)){
+                return response()->json(['error'=>'You provided invalid password!'], 401);
+            }
+        }
+
+
         /*$request->validate([
             // Ovaj sometimes validator je jedna strava stvar, pomocu nje kazes da je ovo polje ponekad-sometimes prisutno, pa ako je prisutno onda primeni ostala validaciona pravila. Dakle, primeni mi validaciona pravila jedino ako je polje prisutno u requestu ("In some situations, you may wish to run validation checks against a field only if that field is present in the input array. To quickly accomplish this, add the  sometimes rule to your rule list": https://laravel.com/docs/5.5/validation#conditionally-adding-rules). A pomocu not_in validatora mu kazes da vrednost polja ne moze biti jednaka nekoj vrednosti i msm da je ovo jako bitan validator.
             'first_name' => 'sometimes|required|not_in:'.$loggedUser->first_name,
@@ -152,13 +168,7 @@ class RegisterController extends Controller
             // Ovde ti ovaj :attribute oznacava ime polja nad kojim se vrsi validacija. Spisak ovakvih stvari nisam nasao, ali na dokumentaciji za validaciju, imas primere u poglavlju (valjda su smatrali da su te info dovoljne) https://laravel.com/docs/5.6/validation#working-with-error-messages pa samo trazi niz $messages sa porukama. PS postoji nesto od ovoga i u fajlu resources/lang/en/validation.php
             'not_in' => 'You cannot enter the same value for :attribute.'
         ])->validate();//Kolko sam skontao iz dokumentacije ovaj validate() na kraju se navodi da bi iskoristio osobine te metode, a to je ili da automatski radi redirekciju na home kad koristis laravel i kao frontend, a kad ga koristis samo kao api, u tom slucaju ova funkcija automatski vraca error poruke u vidu JSON-a
-
-        if($request->reentered_password){
-            // Ovo se msm ne moze uraditi u unutar validacije, pa radim ovako posebno. Hteo sam sa "in" pravilom unutar validacije ovo da resim (in validira polje ukoliko je ono jednako nekoj vrednosti), ali ovo je nemoguce uraditi zato sto se hashovane sifre iz baze ne mogu vracati nikad u prvobitno stanje (https://laracasts.com/discuss/channels/laravel/how-to-decrypt-hash-password-in-laravel?page=1), pa zbog toga i ne mozes da uporedis sifre preko "in" pravila. Umesto toga koristi se \Hash::check, a objasnjenja za to pogledaj u login kontroleru u funkciji authenticate.
-            if(!\Hash::check($request->reentered_password, $loggedUser->password)){
-                return response()->json(['error'=>'You provided invalid password!'], 401);
-            }
-        } 
+         
 
         // Pomocu ovoga ces pokupiti sve inpute, da bi kasnije kroz njih iterirao. Ovo je potrebno jer se unutar $request nalaze i neki drugi podaci, ovako izdvajam samo inpute, odnosno polja forme
         // $requestInputData = $request->all();
@@ -213,6 +223,237 @@ class RegisterController extends Controller
         
 
     }
+
+
+    public function updateUserDataWithMailConfirmation(Request $request)
+    {
+        $loggedUser = \Auth::user();
+
+        if($request->reentered_password){
+            // Ovo se msm ne moze uraditi u unutar validacije, pa radim ovako posebno. Hteo sam sa "in" pravilom unutar validacije ovo da resim (in validira polje ukoliko je ono jednako nekoj vrednosti), ali ovo je nemoguce uraditi zato sto se hashovane sifre iz baze ne mogu vracati nikad u prvobitno stanje (https://laracasts.com/discuss/channels/laravel/how-to-decrypt-hash-password-in-laravel?page=1), pa zbog toga i ne mozes da uporedis sifre preko "in" pravila. Umesto toga koristi se \Hash::check, a objasnjenja za to pogledaj u login kontroleru u funkciji authenticate.
+            if(!\Hash::check($request->reentered_password, $loggedUser->password)){
+                return response()->json(['error'=>'You provided invalid password!'], 401);
+            }
+        }
+
+        
+
+        // Umesto validate metodde direktno na requestu, radim ovaj Validator::make, zato jer mogu kao poslednji argument da mu prosledim custom error poruke, i msm da je to mozda i najbolji nacin da ih definises, svi drugi nacini mi se cine ili dosta komplikovanijim ili moras na globalnom nivou da definises te poruke za celu aplikaciju... Imas to sve na dokumentaciji za validaciju
+        \Validator::make($request->all(), [
+            // Ovaj sometimes validator je jedna strava stvar, pomocu nje kazes da je ovo polje ponekad-sometimes prisutno, pa ako je prisutno onda primeni ostala validaciona pravila. Dakle, primeni mi validaciona pravila jedino ako je polje prisutno u requestu ("In some situations, you may wish to run validation checks against a field only if that field is present in the input array. To quickly accomplish this, add the  sometimes rule to your rule list": https://laravel.com/docs/5.5/validation#conditionally-adding-rules). A pomocu not_in validatora mu kazes da vrednost polja ne moze biti jednaka nekoj vrednosti i msm da je ovo jako bitan validator (pokupio odavde: https://stackoverflow.com/questions/34842487/laravel-5-2-validation-check-if-value-is-not-equal-to-a-variable , ostatak vidi na dokumentaciji).
+            'first_name' => 'sometimes|required|not_in:'.$loggedUser->first_name,
+            'last_name' => 'sometimes|required|not_in:'.$loggedUser->last_name,
+            // Ovde prvo stavljam not_in pa unique da mi ne vraca gresku email has been taken, ako je korisnik uneo istu vrednost svog maila
+            'email' => 'sometimes|required|email|not_in:'.$loggedUser->email.'|unique:users',
+            'password' => ['sometimes', 'required', 'min:8', 'regex:~[0-9]~', 'confirmed'],
+            'password_confirmation' => ['sometimes', 'required', 'min:8', 'regex:~[0-9]~'],
+            // Ovaj required_with znaci da ovo polje mora biti prisutno samo ako je i neko od navedenih polja prisutno. 
+            'reentered_password' => ['required_with:first_name, last_name, email, password, password_confirmation']
+
+        ], [
+            // Ovde ti ovaj :attribute oznacava ime polja nad kojim se vrsi validacija. Spisak ovakvih stvari nisam nasao, ali na dokumentaciji za validaciju, imas primere u poglavlju (valjda su smatrali da su te info dovoljne) https://laravel.com/docs/5.6/validation#working-with-error-messages pa samo trazi niz $messages sa porukama. PS postoji nesto od ovoga i u fajlu resources/lang/en/validation.php
+            'not_in' => 'You cannot enter the same value for :attribute.'
+        ])->validate();//Kolko sam skontao iz dokumentacije ovaj validate() na kraju se navodi da bi iskoristio osobine te metode, a to je ili da automatski radi redirekciju na home kad koristis laravel i kao frontend, a kad ga koristis samo kao api, u tom slucaju ova funkcija automatski vraca error poruke u vidu JSON-a
+         
+
+        // Pomocu ovoga ces pokupiti sve inpute, da bi kasnije kroz njih iterirao. Ovo je potrebno jer se unutar $request nalaze i neki drugi podaci, ovako izdvajam samo inpute, odnosno polja forme
+        // $requestInputData = $request->all();
+        // OVAKO JE BOLJE, TJ MORAO BI OVAKO DA RADIS!!! Daklem, izdvajam samo ona polja forme koja dolaze u obzir da ih updateujem! Msm da je ovo JAKO bitno, jer tebi zlonamerni korisnik moze da doda koje hoce polje u formu i da je posalje preko requesta! S ovim ovde ti vrsis restrikciju koja ces polja primiti! Bez ovoga npr korisnik bi mogao da ti doda input tipa verified=0 il nesto slicno (to bi bio onaj mass assignment sto se spominje u laravel dokumentaciji i laracasts tutorijalu) i to bi po meni ovde moglo da prodje da ne vrsis ovakvu restrikciju!!! PS ovu metodu only imas ovde https://laravel.com/docs/5.6/requests
+        $requestInputData = $request->only(['first_name', 'last_name', 'email', 'password']);
+
+        if($requestInputData){
+            $userUpdate = new UserUpdate;
+            
+            foreach ($requestInputData as $key => $value) {
+                if($key === 'password'){
+                    $userUpdate[$key] = bcrypt($value);
+                }else{
+                    $userUpdate[$key] = $value;
+                }
+            }
+
+            $userUpdate->user_id = $loggedUser->id;
+            $verify_token = str_random(25).$this->get_clean_microtimestamp_string();
+            $userUpdate->verify_token = $verify_token;
+            if($request->email){
+                $block_request_token = $this->get_clean_microtimestamp_string().str_random(30);
+                $userUpdate->block_request_token = $block_request_token;
+            }
+            
+            
+            // $userUpdate->save();
+
+            // Moze dobaviti samo jedan record iz baze, jer si u migraciji naveo da je user_id unique, tako da koristi first() slobodno
+            $alreadyExistingRequest = UserUpdate::where('user_id', $loggedUser->id)->first();
+
+            /*Ovaj ceo veliki try catch ovde radim zato sto sam u migraciji stavio da mi user_id bude unique i sad kad pokusam da unesem request od istog usera, doci ce do greske u mysqlu (DA ODMAH NAPRAVIM DISCLAIMER: MISLIM DA JE OVAJ NACIN MOZDA PREVISE KOMPLIKOVAN, AL GA OSTAVLJAM ZBOG POUCNOG KODA. MSM DA JE BOLJE DA RADIS KAO ZA PASSWORD RESETE. VIDI TU MIGRACIJU KOJA INACE DOLAZI UZ INSTALACIJU LARAVELA, TAKO DA BI MORALA BITI PRILICNO POUZDANA. VIDECES U NJOJ DA SE NE PRAVI UNIQUE POLJE ZA EMAIL, A KAKO SPRECAVAS DUPLIKATE VIDI U PASSWORD RESET KONTROLERU U METODI forgotPasswordRequest KAKO RADIS BRISANJE. MSM DA JE TAJ NACIN BOLJI JER MOZES U STARTU DA UNESES U TABELU REQUEST KOJI IMA ISTI EMAIL KAO I NEKI VEC POSTOJECI U TABELI - PA TEK KAD SI SIGURAN DA SI GA UNEO, TAD MOZES KOMOTNO OBRISATI OVAJ VEC POSTOJECI!). E sad, problem je u tome sto da bi uneo novi request stari prethodno treba da obrisem. Ok, to sam mogao i da uradim bez ovog try cathc, mogo sam samo da proverim if($alreadyExistingRequest) pa ako postoji da ga obrisem, ali ova try catch fora gde hvatas gresku br 1062 je dobra kao primer da imas ovde, al msm da nije najjednostavnije resenje. Zapravo msm da je cela ideja da stavljam unique polje tamo gde cu kasnije ipak unositi redove sa jednakom vrednosti tog polja (naravno uz potrebu da onaj vec postojeci red brisem da bi mogao uneti novi) ipak losa. Zasto? Pa zato sto moram da obrisem ovog vec postojeceg, a u principu nemam garancije da ce mi se ovaj novi sigurno uneti u tabelu (mada ce ti se NAJVEROVATNIJE uneti, al ajd), jer moze doci do neke greske. Tada bi dosao u situcaiju da sam obrisao postojeci red u tabeli, a novi nisam uneo. Naravno tu postoji fora da ovog postojeceg pre nego sto ga obrises iz tabele sacuvas u memoriji backend koda sto ja ovde i radim (u try catch unutar ovog glavnog try catch), pa ukoliko unosenje novog ne uspe, onda ipak vracam starog u tabelu (mada ako hoces da sitnicaris mozes postaviti i pitanje, a sta ako ti ni ovaj povratak starog ne uspe? jbg). U ovom tvom nested try catch delu tu moze doci do problema ukoliko unosenje novog ne uspe zbog neke greske koje catch deo ne predvidja da uhvati, onda ti se catch deo nece ni izvrsiti. Moguce je da postoji fora da hvatas bukvalno bilo koju gresku ali gledajuci po netu cini mi se da je to suvise komplikovano, pa cu ipak ostaviti ovako...*/
+            // ovu foru sa try catch pokupio ovde https://stackoverflow.com/questions/27878719/laravel-catch-eloquent-unique-field-error
+            try{
+
+                $userUpdate->save();
+
+            }catch (\Illuminate\Database\QueryException $e){
+                // Ovaj \Illuminate\Database\QueryException ovde koristim jer mi radi posao, ali kad bi se desila neka greska koja ne spada u QueryException ovaj kod unutar catcha ti se uopste ne bi izvrsio, al bi laravel sam bacio gresku (to sam testirao i skontao)
+                
+                $errorCode = $e->errorInfo[1];
+                // vidi ovde za gresku br 1062 https://dev.mysql.com/doc/refman/5.5/en/error-messages-server.html#error_er_dup_entry - nju ti salje mysql kada pokusavas da uneses novi red u tabelu koji sadrzi duplikat nekog unique polja, u ovom slucaju ako unosis novi red koji ima isti user_id kao neki postojeci red u tabeli
+                if($errorCode === 1062){
+
+                    // Ovde brisem taj postojeci red iz tabele koji sadrzi isti user_id kao ovaj novi koji pokusavam da unesem
+                    UserUpdate::where('user_id', $loggedUser->id)->delete();
+                    // Kad ga obrisem ponovo pokusavam da unesem ovaj novi red i u slucaju da to iz nekog razloga (sto se verovatno nece desiti) ne uspe, onda ovaj stari koji sam obrisao iz baze, ali sacuvao ovde u Laravel kodu, vracam nazad u bazu sa ovom insert metodom i vracam gresku na frontend zbog koje nisam uspeo da unesem ovaj novi red.
+                    try {
+
+                        $userUpdate->save();
+
+                    } catch (\Illuminate\Database\QueryException $e) {
+                        // Kad bi ti se ovde desila neka greska koja ne spada u ovaj \Illuminate\Database\QueryException (sto doduse ni ne znam dal moze da se desi, ovde npr kaze da ce sve syntax i query greske u mysqlu biti ovog tipa: https://stackoverflow.com/questions/33679996/how-do-i-catch-a-query-exception-in-laravel-to-see-if-it-fails, a mozda moze docci i do nekih drugih gresaka osim syntax i query prilikom save() metode, ja to ne znam), ovaj catch bi ti se uopste ne bi izvrsio, tako da msm da ovo nije najsigurniji nacin da radis sve ovo, al ajd...Moguce je da postoji fora da hvatas bukvalno bilo koju gresku ali gledajuci po netu cini mi se da je to suvise komplikovano, pa cu ipak ostaviti ovako...
+
+                        // Ovaj insert (https://laravel.com/docs/5.5/queries#inserts) ovde koristim jer hocu da mi ostanu stari timestampsovi (kad koristis query builder oni se ne updateuju automatski https://stackoverflow.com/questions/33452124/query-builder-not-inserting-timestamps), a ako koristim save ili create metodu (Eloquent metode) oni se automatski updateuju
+                        DB::table('user_updates')->insert(
+                            [
+                                'user_id' => $alreadyExistingRequest->user_id,
+                                'verify_token' => $alreadyExistingRequest->verify_token,
+                                'block_request_token' => $alreadyExistingRequest->block_request_token,
+                                'first_name' => $alreadyExistingRequest->first_name,
+                                'last_name' => $alreadyExistingRequest->last_name,
+                                'email' => $alreadyExistingRequest->email,
+                                'password' => $alreadyExistingRequest->password,
+                                'created_at' => $alreadyExistingRequest->created_at,
+                                'updated_at' => $alreadyExistingRequest->updated_at
+                            ]
+                        );
+
+                        // Ovo sam sam ovako formirao (nisam nasao na netu il tako nesto), i stavio 500 jer mi je inace laravel vracao mysql gresku za duplikat (1062) sa statusom 500 jbg, pa sam po ugledu na to uradio i radilo mi je ovako, dal moze bolje ne znam
+                        return response()->json(['error' => $e], 500);
+
+                    }
+                    
+                }
+
+            }
+
+            // Ukoliko se vrsi izmena maila
+            if ($request->email) {
+                \Mail::to($request->email)->send(new UserUpdateNewEmailStyled($request->email, $loggedUser->id, $loggedUser->first_name, $verify_token));
+                // Pomocu ovog tokena user moze sa starog maila ili da blokira request ukoliko jos nije odobren sa novog maila, ili ukoliko je odobren da ponisti promene koje su tom prilikom nastale
+                $block_request_or_revoke_changes_token = $block_request_token;
+                \Mail::to($loggedUser->email)->send(new UserUpdateOldEmailStyled($loggedUser->first_name, $loggedUser->id, $userUpdate->id, $block_request_or_revoke_changes_token));            
+            }else{
+                \Mail::to($loggedUser->email)->send(new UserUpdateCurrentEmailStyled($loggedUser->email, $loggedUser->id, $loggedUser->first_name, $verify_token));
+            }
+
+            return response()->json(["success" => "success"], 200);
+        }else{
+            return response()->json(['error'=>'You didnt provide any data!'], 422);
+        }
+
+        
+
+    }
+
+    public function verifyUserUpdate(Request $request){
+        $user_update_row = UserUpdate::where(['user_id'=>$request->user_id, 'verify_token'=>$request->verify_token])->first();
+
+        if($user_update_row){
+            $user = User::find($request->user_id);
+            if($user){
+
+                // Kada updateujem usera uvek prethodnu verziju usera sejvujem u tabelu user_data_versions
+                $userUpdateVersion = new UserDataVersion;
+
+                $userUpdateVersion->user_id = $user->id;
+                $userUpdateVersion->user_update_id = $user_update_row->id;
+                $userUpdateVersion->rollback_revoke_changes_token = $user_update_row->block_request_token;
+                $userUpdateVersion->first_name = $user->first_name;
+                $userUpdateVersion->last_name = $user->last_name;
+                $userUpdateVersion->email = $user->email;
+                $userUpdateVersion->password = $user->password;
+                //ne mogu koristiti timestampsove iz $user jer se oni  ne retrievuju u originalnom formatu koji meni treba ovde, nego u onom kakvom sam ja definisao u traitu App/My_custom_files/unixTimestampFromDate.php
+                /*$user_original_created_at = DB::table('users')->where('id', $user->id)->value('created_at');
+                $userUpdateVersion->user_created_at = $user_original_created_at;
+                $user_original_updated_at = DB::table('users')->where('id', $user->id)->value('updated_at');
+                $userUpdateVersion->user_updated_at = $user_original_updated_at;*/
+
+                // $userUpdateVersion->save();
+
+                // Ovde se koristi ova metoda i super radi! https://laravel.com/docs/5.5/collections#method-only
+                $user_update_data = $user_update_row->only(['first_name', 'last_name', 'email', 'password']);
+                foreach ($user_update_data as $key => $value) {
+                    if($value)
+                        $user[$key] = $value;
+                }
+
+                $userUpdated = $user->save();
+                if($userUpdated){
+                    $userUpdateVersion->save();
+                    UserUpdate::where('user_id', $user->id)->delete();
+                }
+
+
+                return $user;
+            }else{
+                return response()->json(['error'=>"You are not authorized for this action!"], 401);
+            }
+        }else{
+            return response()->json(['error'=>'Your request is not exceptable to the server. Please try to log in to check if you have already verified your account changes. Also if you made account change requests after this request, then this request is not valid anymore.'], 406);
+        }
+    }
+
+    public function blockRevokeChanges(Request $request)
+    {
+        $user_id = $request->user_id;
+        // Ovaj user_update_id vucem iz tabele user_updates i treba mi da bi red u tabeli user_data_versions mogao sigurno jednoznacno da targetiram. Jeste i da ga id jednoznacno odredjuje, ali meni treba nesto sto ce ga jednoznacno odrediti jos pre nego sto sacuvam taj red u tabeli, da bi ga mogao koristiti u old emailu za rollback (revoke changes kako god) u ovoj metodi
+        $user_update_id = $request->user_update_id;
+        $block_request_token = $request->block_request_revoke_changes_token;
+        $rollback_revoke_changes_token = $request->block_request_revoke_changes_token;
+
+        $request_for_blocking = UserUpdate::where(['user_id'=>$user_id, 'block_request_token'=>$block_request_token])->first();
+        
+        // Definicija sa google translate za rollback: the process of restoring a database or program to a previously defined state, typically to recover from an error.
+        // Ovu restrikciju za NULL ipak stavljam, jer moguce je da mi neki zlonamerni korisnik umesto tokena posalje NULL na server i to bi mozda i moglo da prodje, a to ne bi nikako smelo da prodje, jer verzije uzera kojima je token NULL su one verzije na koje se user ne moze povratiti vise.
+        $userRollbackVersion = UserDataVersion::where(['user_id'=>$user_id, 'user_update_id'=>$user_update_id, 'rollback_revoke_changes_token'=>$rollback_revoke_changes_token])->whereNotNull('rollback_revoke_changes_token')->first();
+        
+        if(!$request_for_blocking && !$userRollbackVersion){
+            return response()->json(['error'=>"You are not authorized for this action! Please try to log in to check if you have already restored your account data."], 401);
+        }
+
+        if($request_for_blocking){
+            $request_for_blocking->delete();
+        }
+
+        $user = User::find($user_id);
+
+        if ($userRollbackVersion) {
+            
+            // Vracam usera na zahtevanu verziju
+            $user->first_name = $userRollbackVersion->first_name;
+            $user->last_name = $userRollbackVersion->last_name;
+            $user->email = $userRollbackVersion->email;
+            $user->password = $userRollbackVersion->password;
+
+            $rolledbackUser = $user->save();
+
+            if($rolledbackUser){
+                
+                $userRollbackVersion->update(['rollback_revoke_changes_token' => NULL]);
+
+                UserDataVersion::where('user_id', $user_id)->where('created_at', '>', $userRollbackVersion->created_at)->whereNotNull('rollback_revoke_changes_token')->update(['rollback_revoke_changes_token' => NULL]);
+                
+            }
+            
+        }
+        
+        return $user;
+
+    }
+
+
+    public function invalidateAllUsersLogins($user_id)
+    {
+        # code...
+    }
+
 
     public function verify(Request $request)
     {

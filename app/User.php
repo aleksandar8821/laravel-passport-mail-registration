@@ -48,4 +48,8 @@ class User extends Authenticatable
         return $this->hasMany(ImageComment::class);
     }
 
+    public function user_update(){
+        return $this->hasOne(UserUpdate::class);
+    }
+
 }

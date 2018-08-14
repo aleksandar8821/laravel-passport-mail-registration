@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use App\User;
 use App\UserUpdate;
 use App\UserDataVersion;
+use App\UserAccessBlocking;
 use App\Mail\RegisterVerification;
 use App\Mail\UserUpdateCurrentEmailStyled;
 use App\Mail\UserUpdateNewEmailStyled;
@@ -275,10 +276,13 @@ class RegisterController extends Controller
             $userUpdate->user_id = $loggedUser->id;
             $verify_token = str_random(25).$this->get_clean_microtimestamp_string();
             $userUpdate->verify_token = $verify_token;
-            if($request->email){
+            /*if($request->email){
                 $block_request_token = $this->get_clean_microtimestamp_string().str_random(30);
                 $userUpdate->block_request_token = $block_request_token;
-            }
+            }*/
+            // Ipak stavljam block_request_token i ako ne menjam mail (MOZDA SAMO PRIVREMENO, MOZDA IPAK OVO NE BUDEM KORISTIO VIDECU - ako budes hteo da vratis na staro samo izbrisi ova dva reda ispod i odkomentarisi gore ovaj if + naravno iz current maila izbrisi onda ovaj token) da bi ga koristio u current mailu
+            $block_request_token = $this->get_clean_microtimestamp_string().str_random(30);
+            $userUpdate->block_request_token = $block_request_token;
             
             
             // $userUpdate->save();
@@ -340,7 +344,7 @@ class RegisterController extends Controller
                 $block_request_or_revoke_changes_token = $block_request_token;
                 \Mail::to($loggedUser->email)->send(new UserUpdateOldEmailStyled($loggedUser->first_name, $loggedUser->id, $userUpdate->id, $block_request_or_revoke_changes_token));            
             }else{
-                \Mail::to($loggedUser->email)->send(new UserUpdateCurrentEmailStyled($loggedUser->email, $loggedUser->id, $loggedUser->first_name, $verify_token));
+                \Mail::to($loggedUser->email)->send(new UserUpdateCurrentEmailStyled($loggedUser->email, $loggedUser->id, $loggedUser->first_name, $verify_token, $block_request_token, $userUpdate->id));
             }
 
             return response()->json(["success" => "success"], 200);
@@ -369,11 +373,6 @@ class RegisterController extends Controller
                 $userUpdateVersion->last_name = $user->last_name;
                 $userUpdateVersion->email = $user->email;
                 $userUpdateVersion->password = $user->password;
-                //ne mogu koristiti timestampsove iz $user jer se oni  ne retrievuju u originalnom formatu koji meni treba ovde, nego u onom kakvom sam ja definisao u traitu App/My_custom_files/unixTimestampFromDate.php
-                /*$user_original_created_at = DB::table('users')->where('id', $user->id)->value('created_at');
-                $userUpdateVersion->user_created_at = $user_original_created_at;
-                $user_original_updated_at = DB::table('users')->where('id', $user->id)->value('updated_at');
-                $userUpdateVersion->user_updated_at = $user_original_updated_at;*/
 
                 // $userUpdateVersion->save();
 
@@ -400,6 +399,7 @@ class RegisterController extends Controller
         }
     }
 
+    // Huh, ova metoda se aktivira kada korisnik sumnja da mu je zlonamerni korisnik (otimac naloga) upao na nalog i izvrsio promenu maila (i eventualno i ostalih podataka). Tada ovaj legalni korisnik dobija na svoj originalni (stari) mail poruku sa linkom koji aktivira ovu metodu. Ona treba da blokira request za promenu ukoliko on jos nije potvrdjen od strane otimaca naloga, a ukoliko je potvrdjen treba da vrati podatke na staro, onemoguci otimacu naloga bilo kakav dalji pristup nalogu i pocisti svo djubre koje je on eventualno ostavio na nalogu. Tu mislim na ono djubre koje bi mu omogucilo ponovno otimanje naloga, a ne na akcije koje je uradio na samoj aplikaciji, tipa pisao komentare i slicno. Zasto se tim akcijama ne bavim? Zato sto je on mogao praviti te akcije i pre nego sto je promenuo podatke. Jednostavno ne bi znao od kog momenta da pocnem da ponistavam te akcije, jer ne znam u kom momentu je on poceo da vrslja po tudjem nalogu.
     public function blockRevokeChanges(Request $request)
     {
         $user_id = $request->user_id;
@@ -425,6 +425,13 @@ class RegisterController extends Controller
         $user = User::find($user_id);
 
         if ($userRollbackVersion) {
+
+            // Hah, da, sad mi je palo na pamet, moze se desiti jedan interesantan hack od strane otimaca naloga. Udje ti na nalog promeni ti mail, a zatim posto zna da mozes da uradis rollback na staru verziju podataka, registruje novog usera sa tvojim originalnim mailom. I tada ti ne mozes da uradis rollback, zato sto je email unique u users tabeli! Tako da cu sada to i da sprecim:
+            $createdUserForHacking = User::where('email', $userRollbackVersion->email)->where('verified', 0)->first();// Trazim samo korisnika koji nije verifikovan, jer ne moze ga verifikovati, jer nema pristup tvom mailu. A ako i to ima, onda jbg, ima ti pristup svemu onda i onda ne vredi da te spasavam uopste...
+            if ($createdUserForHacking) {
+                $createdUserForHacking->delete();
+            }
+
             
             // Vracam usera na zahtevanu verziju
             $user->first_name = $userRollbackVersion->first_name;
@@ -436,13 +443,43 @@ class RegisterController extends Controller
 
             if($rolledbackUser){
                 
+                // Kad jednom uradim rollback, taj token pomocu kojeg sam to uradio je iskoriscen i ne moze se vise koristiti, tj vise nema vracanja na tu specificnu verziju, bolje receno taj red u tabeli user_data_versions
                 $userRollbackVersion->update(['rollback_revoke_changes_token' => NULL]);
-
+                // Takodje kad se uradi rollback na odredjenu verziju usera u tabeli user_data_versions, sve verzije koje su u medjuvremenu nastale posle verzije nad kojom je uradjen rollback gube mogucnost da se na njih vracas. Zasto? Zato sto se predpostavlja da je njih nacinio otimac naloga, a on ima kod sebe u mailovima linkove pomocu kojih se rade rollbackovi na odredjene verzije user podataka. Sledecim korakom se prakticno ti linkovi disableuju, odnosno tokeni koje ti linkovi sadrze postaju nevazeci!
                 UserDataVersion::where('user_id', $user_id)->where('created_at', '>', $userRollbackVersion->created_at)->whereNotNull('rollback_revoke_changes_token')->update(['rollback_revoke_changes_token' => NULL]);
                 
             }
+
+            // Brisem i bilo kakav nepotvrdjeni request od otimaca naloga (takav moze biti samo jedan, s obzirom da samo jedan request od nekog usera moze biti u tabeli user_updates), ako eventualno postoji tako nesto. Tu se naravno postavlja pitanje zasto ovo ne uraditi odmah u startu i zasto uopste trazis token za brisanje nepotvrdjenog requesta koji sadrzi promenu maila, zasto jednostavno ne das korisniku mogucnost da cim stisne na link za blokadu da se bilo koji nepotvrdjeni request odmah obrise. A odgovor jeeeee: Zato sto bi onda mogao bilo ko bez odgovarajuceg tokena da brise te requestove, a to bi mogao i da iskoristi otimac naloga, nakon sto je nalog povracen legalnom korisniku. Mogao bi u prevodu da brise nepotvrdjene zahteve legalnom korisniku iz svog nekog starog maila koji sadrzi link za blokiranje zahteva. U ovom slucaju to ne moze jer mora da ima odgovarajuci token, koji ce odgovarati verziji u tabeli user_data_versions. Naravno moras ga porediti sa tokenom iz te tabele, a ne sa tokenom iz tabele user_updates, jer ti ovde na pocetku ove metode odmah brises taj request sa tim tokenom iz user_updates tabele, ukoliko on postoji. Ovo vazi dakle za slucaj da request sa tokenom ne postoji u tabeli user_updates, da verzija usera sa tokenom postoji u tabeli user_data_versions, i da u user_updates postoji neki nepotvrdjeni request koji je otimac naloga napravio dok je imao pristup nalogu. Taj request brisem jer u sustini ako se on ne obrise otimac naloga moze da ga potvrdi kad god hoce (i kad se nalog vrati legalnom korisniku) i time da promeni podatke naloga u svoju korist.
+            UserUpdate::where('user_id', $user_id)->delete();
             
         }
+
+        /****BLOKIRAM USERU PRISTUP APLIKACIJI****/
+        $blockUser = new UserAccessBlocking;
+
+        $blockUser->user_id = $user_id;
+        $allow_access_token = $this->get_clean_microtimestamp_string().str_random(30);
+        $blockUser->allow_access_token = $allow_access_token;
+        $blockUser->expires_at = now()->addHours(48);
+
+        $blockUser->save();
+
+        // Brisem prethodno uneseno blokiranje usera iz tabele, jer bi trebalo uvek da imam samo jedno blokiranje aktivno za jednog usera, jer ako ih ima vise mogu dolaziti u konflikt
+        UserAccessBlocking::where('user_id', $user_id)->where('id', '!=', $blockUser->id)->delete();
+
+        /*****************************************/
+
+        // Hah, EKSTRA!!! Pomocu ovog $token->revoke(); sam ucinio sve dosadasnje logine datog usera nevalidnim (foru pokupio ovde https://stackoverflow.com/questions/42851676/how-to-invalidate-all-tokens-for-an-user-in-laravel-passport , slicne stvari se spominju i ovde pri kraju https://laracasts.com/discuss/channels/general-discussion/laravel-56-and-passport-how-to-logout . Pretpostavljam da se ovaj metod moze primeniti svugde gde je implementiran ovaj OAuth2 sistem za autentifikaciju, sa njim inace radi Laravel Passport kojeg ja ovde koristim. Vise o tome vidi ovdde: https://laravel.com/docs/5.5/passport#introduction , https://github.com/thephpleague/oauth2-server , https://oauth2.thephpleague.com/). Prakticno sam ga izlogovao svugde gde je ikad bio ulogovan! Ovo je jako dobra stvar sto se tice sigurnosti. Dakle kad user blokira i opozove (revokeuje) promene pretpostavljajuci da ih je otimac naloga inicirao, ovim ce automatski i izlogovati otimaca naloga ako je negde ulogovan. Doduse i sam legalan vlasnik naloga ce biti izlogovan, ali ako hoce da izloguje i otimaca naloga cini mi se da mora ovako. Jer kako ja da znam koji je access token od otimaca naloga a koji je od legalnog korisnika. Otimac naloga moze da bude ulogovan i sa originalnim podacima legalnog korisnika, tako da svugde radim logout!
+        $userTokens = $user->tokens;
+
+        foreach($userTokens as $token) {
+            $token->revoke();   
+        }
+        
+        // Po mom misljenju nema potrebe ponistavati password resete koje je otimac naloga eventualno pravio, jer su one uvek vezane za email (na osnovu emaila iz password reset requesta ti selektujes usera kojem ces promenuti sifru), a ti ovde svakako vracas email na staru vrednost, tako da se reset ne moze izvrsiti.
+
+        // Takodje msm da nema potrebe da stavljas kod za blokiranje pristupa na metode za verifikaciju koje se pozivaju preko maila za update za new i current email. Pre svega to ne bi imalo Bog zna kakvog efekta, jer se tim ogranicava neko zlonamerno delovanje samo za 48 sati, a naravno treba to u potpunosti spreciti za sva vremena. A ja sam to zapravo vec i uradio ovde, jer brisem sve zahteve korisnika iz tabele user_updates, tako da je to ovim reseno!
         
         return $user;
 

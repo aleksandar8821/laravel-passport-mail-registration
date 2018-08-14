@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 
 use App\User;
+use App\UserAccessBlocking;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 
 class LoginController extends Controller
@@ -19,9 +21,36 @@ class LoginController extends Controller
      *
      * @return \Illuminate\Http\Response
      */ 
-     //Ovako inace radi Laravelova metoda za login Auth::attempt()(https://laravel.com/docs/5.5/authentication#authenticating-users), ja sam je razlozio da bi mogao da uhvatim dve razlicite greske kao i da user-a logujem tek nakon pojedinacnih provera za greske, jer attempt() metoda odmah loguje usera. Dakle attempt() prvo vadi user-a preko mail-a pa zatim proverava da li mu se sifra koju je uneo poklapa sa hashovanom sifrom u bazi (vidi check metodu ovde https://laravel.com/docs/5.5/hashing) i odmah ga loguje. Ja sam isto uradio (+ proveravam da li je verified) samo u odvojenim koracima, da bi mogao da hvatam pojedinacne greske:
      
         $user = User::where(['email'=>$request->email])->first();
+
+        /***KOD ZA BLOKIRANJE PRISTUPA BLOKIRANIM USERIMA***/
+
+        $userBlocked = UserAccessBlocking::where('user_id', $user->id)->where('expires_at', '>', now())->first();
+
+        if($userBlocked){
+            if ($request->allow_access_token !== $userBlocked->allow_access_token) {
+
+                if($userBlocked->expires_at){
+                    $unblockPeriod = Carbon::now()->diffInHours(Carbon::createFromFormat('Y-m-d H:i:s', $userBlocked->expires_at));
+                    
+                    if($unblockPeriod > 1) {
+                        return response()->json(['error'=>'Your account is blocked, and you will not be able to access it for next '.$unblockPeriod.' hours!'], 403);
+                    }else{
+                        $unblockPeriod = Carbon::now()->diffInMinutes(Carbon::createFromFormat('Y-m-d H:i:s', $userBlocked->expires_at));
+                        return response()->json(['error'=>'Your account is blocked, and you will not be able to access it for next '.$unblockPeriod.' minutes!'], 403);
+                    }
+
+                }else{
+                    return response()->json(['error'=>'Your account is blocked!'], 403);
+                }
+                
+            }
+        }
+
+        /****************************************************/
+
+        //Ovako inace radi Laravelova metoda za login Auth::attempt()(https://laravel.com/docs/5.5/authentication#authenticating-users), ja sam je razlozio da bi mogao da uhvatim dve razlicite greske kao i da user-a logujem tek nakon pojedinacnih provera za greske, jer attempt() metoda odmah loguje usera. Dakle attempt() prvo vadi user-a preko mail-a pa zatim proverava da li mu se sifra koju je uneo poklapa sa hashovanom sifrom u bazi (vidi check metodu ovde https://laravel.com/docs/5.5/hashing) i odmah ga loguje. Ja sam isto uradio (+ proveravam da li je verified) samo u odvojenim koracima, da bi mogao da hvatam pojedinacne greske:
 
         if($user && (\Hash::check($request->password, $user->password))){
             if($user->verified === 1){

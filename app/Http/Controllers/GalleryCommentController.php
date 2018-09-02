@@ -82,9 +82,28 @@ class GalleryCommentController extends Controller
      * @param  \App\GalleryComment  $galleryComment
      * @return \Illuminate\Http\Response
      */
-    public function update(Request $request, GalleryComment $galleryComment)
+    public function update(Request $request)
     {
-        //
+        $comment = GalleryComment::find($request->id);
+
+        \Validator::make($request->all(), [
+            'comment_body' => 'required|not_in:'.$comment->comment_body
+        ], [
+            'not_in' => 'You cannot enter the same value for selected comment.'
+        ])->validate();
+
+
+        // user moze da edituje samo svoje komentare
+        if($comment->user_id === \Auth::user()->id){
+            $comment->comment_body = $request->comment_body;
+            $comment->save();
+
+            return $comment;
+
+        }else{
+            return response()->json(["error" => "You are not authorized to update this comment!"], 401);
+        }
+
     }
 
     /**

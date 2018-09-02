@@ -30,6 +30,14 @@ class GalleryController extends Controller
         return $galleries;
     }
 
+    public function allGalleriesForFirebase(){
+
+      $galleries = Gallery::with(['user', 'images.comments.user', 'comments.user'])->take(5)->get();
+
+      return $galleries;
+
+    }
+
     /**
      * Show the form for creating a new resource.
      *

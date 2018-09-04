@@ -384,9 +384,21 @@ class RegisterController extends Controller
                 }
 
                 $userUpdated = $user->save();
+                
                 if($userUpdated){
                     $userUpdateVersion->save();
                     UserUpdate::where('user_id', $user->id)->delete();
+
+                    // Ukoliko se updateuje email ili sifra (koji su oba login credentials, tj sluze za login) korisnik se svugde automatski logoutuje 
+                    if($user_update_row->email || $user_update_row->password){
+                        // Ovo logoutuje usera svugde gde je ulogovan, detaljnija objasnjenja ovoga imas ovde u funkciji blockRevokeChanges
+                        $userTokens = $user->tokens;
+
+                        foreach($userTokens as $token) {
+                            $token->revoke();   
+                        }    
+                    }
+                    
                 }
 
 

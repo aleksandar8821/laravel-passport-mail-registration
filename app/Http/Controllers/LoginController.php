@@ -24,7 +24,7 @@ class LoginController extends Controller
      
         $user = User::where(['email'=>$request->email])->first();
 
-        /***KOD ZA BLOKIRANJE PRISTUPA BLOKIRANIM USERIMA (u ovom konkretnom slucaju moram samo da proveravam da li user postoji tj radim odma na pocetku if($user) (na ostalim mestima gde sam dosada radio ovakvu blokadu ne treba ovo), jer ukoliko ne postoji $user, kod ispod koji radi autentifikaciju nece uraditi bas sve kako treba)***/
+        /***KOD ZA BLOKIRANJE PRISTUPA BLOKIRANIM USERIMA (u ovom konkretnom slucaju moram da proveravam da li user postoji tj radim odma na pocetku if($user) (na ostalim mestima gde sam dosada radio ovakvu blokadu ne treba ovo), jer ukoliko ne postoji $user, desice se greska u ovom delu koda za blokiranje tako da kod ispod koji radi autentifikaciju se nece ni izvrsiti. Ovim if($user) je to reseno!)***/
         if($user){
             $userBlocked = UserAccessBlocking::where('user_id', $user->id)->where('expires_at', '>', now())->first();
 

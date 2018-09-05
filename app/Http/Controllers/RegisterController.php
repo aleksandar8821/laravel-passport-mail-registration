@@ -344,7 +344,7 @@ class RegisterController extends Controller
                 $block_request_or_revoke_changes_token = $block_request_token;
                 \Mail::to($loggedUser->email)->send(new UserUpdateOldEmailStyled($loggedUser->first_name, $loggedUser->id, $userUpdate->id, $block_request_or_revoke_changes_token));            
             }else{
-                \Mail::to($loggedUser->email)->send(new UserUpdateCurrentEmailStyled($loggedUser->email, $loggedUser->id, $loggedUser->first_name, $verify_token, $block_request_token, $userUpdate->id));
+                \Mail::to($loggedUser->email)->send(new UserUpdateCurrentEmailStyled($loggedUser->email, $loggedUser->id, $loggedUser->first_name, $verify_token, $block_request_token));
             }
 
             return response()->json(["success" => "success"], 200);
@@ -396,7 +396,10 @@ class RegisterController extends Controller
 
                         foreach($userTokens as $token) {
                             $token->revoke();   
-                        }    
+                        }
+
+
+                        return response()->json(["message" => "force logout"], 200);
                     }
                     
                 }
@@ -455,7 +458,7 @@ class RegisterController extends Controller
 
             if($rolledbackUser){
                 
-                // Kad jednom uradim rollback, taj token pomocu kojeg sam to uradio je iskoriscen i ne moze se vise koristiti, tj vise nema vracanja na tu specificnu verziju, bolje receno taj red u tabeli user_data_versions
+                // Kad jednom uradim rollback, taj token pomocu kojeg sam to uradio je iskoriscen i ne moze se vise koristiti, tj vise nema vracanja na tu specificnu verziju, bolje receno taj red u tabeli user_data_versions. PISEM KASNIJE: JEL OVAJ KORAK NEOPHODAN? NE ZNAM, ZA SAD OSTAVLJAM OVAKO...
                 $userRollbackVersion->update(['rollback_revoke_changes_token' => NULL]);
                 // Takodje kad se uradi rollback na odredjenu verziju usera u tabeli user_data_versions, sve verzije koje su u medjuvremenu nastale posle verzije nad kojom je uradjen rollback gube mogucnost da se na njih vracas. Zasto? Zato sto se predpostavlja da je njih nacinio otimac naloga, a on ima kod sebe u mailovima linkove pomocu kojih se rade rollbackovi na odredjene verzije user podataka. Sledecim korakom se prakticno ti linkovi disableuju, odnosno tokeni koje ti linkovi sadrze postaju nevazeci!
                 UserDataVersion::where('user_id', $user_id)->where('created_at', '>', $userRollbackVersion->created_at)->whereNotNull('rollback_revoke_changes_token')->update(['rollback_revoke_changes_token' => NULL]);
@@ -493,8 +496,54 @@ class RegisterController extends Controller
 
         // Takodje msm da nema potrebe da stavljas kod za blokiranje pristupa na metode za verifikaciju koje se pozivaju preko maila za update za new i current email. Pre svega to ne bi imalo Bog zna kakvog efekta, jer se tim ogranicava neko zlonamerno delovanje samo za 48 sati, a naravno treba to u potpunosti spreciti za sva vremena. A ja sam to zapravo vec i uradio ovde, jer brisem sve zahteve korisnika iz tabele user_updates, tako da je to ovim reseno!
         
-        return $user;
+        return response()->json(["message" => "force logout"], 200);
 
+    }
+
+
+    public function block_request_and_account_logout_user(Request $request)
+    {
+        $user_id = $request->user_id;
+        $block_request_token = $request->block_request_revoke_changes_token;
+
+        $request_for_blocking = UserUpdate::where(['user_id'=>$user_id, 'block_request_token'=>$block_request_token])->first();
+
+        if($request_for_blocking){
+            $request_for_blocking->delete();
+        }else{
+            return response()->json(['error'=>"You are not authorized for this action!"], 401);   
+        }
+
+        $user = User::find($user_id);
+
+        /****BLOKIRAM USERU PRISTUP APLIKACIJI****/
+        $blockUser = new UserAccessBlocking;
+
+        $blockUser->user_id = $user_id;
+        $allow_access_token = $this->get_clean_microtimestamp_string().str_random(30);
+        $blockUser->allow_access_token = $allow_access_token;
+        $blockUser->expires_at = now()->addHours(48);
+
+        $blockUser->save();
+
+        // Brisem prethodno uneseno blokiranje usera iz tabele, jer bi trebalo uvek da imam samo jedno blokiranje aktivno za jednog usera, jer ako ih ima vise mogu dolaziti u konflikt
+        UserAccessBlocking::where('user_id', $user_id)->where('id', '!=', $blockUser->id)->delete();
+
+        /*****************************************/
+
+
+        // Ovo logoutuje usera svugde gde je ulogovan, detaljnija objasnjenja ovoga imas ovde u funkciji blockRevokeChanges
+        $userTokens = $user->tokens;
+
+        foreach($userTokens as $token) {
+            $token->revoke();   
+        }
+
+
+
+        return response()->json(["message" => "force logout"], 200);
+        // $loggedUser = \Auth::user();
+        // return $loggedUser;
     }
 
 

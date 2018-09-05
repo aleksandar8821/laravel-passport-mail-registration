@@ -21,21 +21,19 @@ class UserUpdateCurrentEmailStyled extends Mailable
     public $user_first_name;
     public $verify_token;
     public $block_request_token;
-    public $user_update_id;
 
     /**
      * Create a new message instance.
      *
      * @return void
      */
-    public function __construct($email, $user_id, $user_first_name, $verify_token, $block_request_token, $user_update_id)
+    public function __construct($email, $user_id, $user_first_name, $verify_token, $block_request_token)
     {
         $this->email = $email;
         $this->user_id = $user_id;
         $this->user_first_name = $user_first_name;
         $this->verify_token = $verify_token;
         $this->block_request_token = $block_request_token;
-        $this->user_update_id = $user_update_id;
     }
 
     /**

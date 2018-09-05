@@ -53,7 +53,8 @@ Route::patch('/update_user_data', 'RegisterController@updateUserData')->middlewa
 Route::put('/update_user_data', 'RegisterController@updateUserData')->middleware('auth:api');
 Route::post('/update_user_data_mail_conf', 'RegisterController@updateUserDataWithMailConfirmation')->middleware('auth:api');
 Route::patch('/update_user_data_mail_conf/verify', 'RegisterController@verifyUserUpdate');
-Route::patch('/update_user_data_mail_conf/block_revoke_changes', 'RegisterController@blockRevokeChanges');
+Route::patch('/update_user_data_mail_conf/block_revoke_changes', 'RegisterController@blockRevokeChanges');// jes da ova funkcija svasta radi, al ostavicu ipak da request bude patch, ionako ne znam kako bi definisao ovaj request (mozda post kao neka generalna varijanta? >>> mada ovde ipak najvise odgovara patch zbog revoke-a odnosno rollback-a)
+Route::patch('/update_user_data_mail_conf/block_request_and_account_logout_user', 'RegisterController@block_request_and_account_logout_user');// jes i da ova funkcija svasta radi, al ostavicu ipak da request bude patch, ionako ne znam kako bi definisao ovaj request (mozda post kao neka generalna varijanta?)
 
 
 Route::patch('/register/verify', 'RegisterController@verify');

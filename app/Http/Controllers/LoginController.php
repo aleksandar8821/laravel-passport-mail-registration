@@ -9,6 +9,9 @@ use App\UserAccessBlocking;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 
+use Lcobucci\JWT\Parser;
+
+
 class LoginController extends Controller
 {
 
@@ -73,4 +76,50 @@ class LoginController extends Controller
  
 
     }
+
+    // Ovu metodu koristim kada radim revoke access (login) tokena, odnosno kada ja namerno izlogujem usera (force logout) svugde gde je ikad bio ulogovan iz nekog razloga (imas ovo u register controleru, samoo trazi $token->revoke()). E sad taj logout se desava samo ovde na backendu, a na frontendu ostaje token u local storage-u i tebi se prikazuje UI takav kao da je korisnik ulogovan a u stvari nije. Da bi to resio, ja pri svakom http zahtevu koji zahteva da se uz njega salju http headeri sa tokenom iz local storage, saljem jos jedan zahtev koji poziva bas ovu funkciju. Pomocu nje saznajem da li je na backednu uradjen force logout, pa ako jeste, radim to i na frontendu (imas funkciju forceLogout u AuthService koja radi maltene iste stvari kao i obican logout) i time resavam problem. Da ovo ne radim na frontendu bi mi se prikazivao stalno UI kao da sam ulogovan iako zapravo nisam, a zahtevi koje bi pravio a koji zahtevaju da budes ulogovan se ne bi izvrsavali, a dobijao bi gresku od backenda koju (trenutno bar) ne znas  kako da hendlujes! Tako da je ovo za sada najbolje resenje. * KAO DODATAK OVA FUNKCIJA INICIRA FORCE LOGOUT NA FRONTENDU UKOLIKO U LOCAL STORAGEU NE POSTOJE TOKEN I EMAIL, ILI UKOLIKO SU ONI POGRESNI!
+    public function should_force_logout_be_performed(Request $request)
+    {
+        // Bolje da validiras sam da bi mogao da preduzmes odgovarajuce akcije ukoliko nesto nije kako treba 
+        /*$request->validate([
+            'email' => 'required|email|exists:users',
+        ]);*/
+
+        // Ako nema tokena ili emaila u requestu, tj ako ih nije ni bilo u local storage-u. Msm da ovo moras prvo ovde da ispitas (da ti bude prvo po redosledu), da bi ti sve radilo kako treba.
+        if(!$request->accessToken || !$request->email){
+            return response()->json(["message" => "force logout"], 200); 
+        }
+
+        $user = User::where('email', $request->email)->first();
+
+        if(!$user){
+            return response()->json(["message" => "force logout"], 200);
+        }
+
+        // $token = $user->token;//Ovo ti nije dostupno ovde ovako, jedino izgleda ovako https://stackoverflow.com/questions/46673667/laravel-passport-api-retrieve-authenticated-token >>> dakle moras da si ulogovan, tj da ti na rutu bude zakacen auth middleware, ko sto se cak i u linku dole u jednom postu spominje, dok su ti npr $user->tokens uvek dostupni. Zasto je to tako ne znam ali je tako.
+
+        // Nakon 1000 godina resenje nasao ovde https://laracasts.com/discuss/channels/laravel/passport-how-can-i-manually-revoke-access-token
+        $value = $request->accessToken;
+        // Ovo ce da logoutuje usera ukoliko je sam editovao token u local storage-u, jer ovaj Parser odma prepoznaje da on nije u formi u kojoj treba da bude i baca gresku koju sam ja ovde uspeo da uvatim (gledas u konzoli kad ti baci gresku error -> exception) i iniciram naravno force logout na frontendu
+        try {
+            $id= (new Parser())->parse($value)->getHeader('jti');
+        } catch (\RuntimeException $e) {
+            return response()->json(["message" => "force logout"], 200); 
+        }
+
+        $token= $user->tokens->find($id);
+
+        // Naravno ukoliko se token ne nalazi u userovim tokenima i tu je opet nesto sumnjivo i iniciram force logout na frontu
+        if(!$token){
+            return response()->json(["message" => "force logout"], 200); 
+        }
+
+        if($token->revoked){
+            return response()->json(["message" => "force logout"], 200); 
+        }else{
+            return response()->json(["message" => 'token not revoked'], 200); 
+        }
+        
+    }
+
 }

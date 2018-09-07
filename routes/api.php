@@ -47,6 +47,7 @@ Route::post('/password-reset', 'PasswordResetController@resetPassword');
 Route::post('/register', 'RegisterController@register');
 Route::post('/register_with_profile_image', 'RegisterController@registerWithProfileImage');
 Route::get('/get_user_info', 'RegisterController@getUserInfo')->middleware('auth:api');
+Route::post('/should_force_logout_be_performed', 'LoginController@should_force_logout_be_performed');
 
 // U zavisnosti od toga da li su promenjeni samo neki podaci o useru ili svi podaci(doduse bukvalno sva polja iz baze se nece ovde nikada menjati, jer postoje i polja kao sto su verified, zatim tokeni i sl, al nema veze, to mozda i nije bitno, ne znam), koriste se metode patch i put respektivno. Razliku izmedju put i patch requesta vidi ovde https://www.youtube.com/watch?v=-eo3OEW6z1Q (downloadovano), https://laracasts.com/discuss/channels/general-discussion/whats-the-differences-between-put-and-patch?page=1
 Route::patch('/update_user_data', 'RegisterController@updateUserData')->middleware('auth:api');

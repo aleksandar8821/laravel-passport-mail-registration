@@ -11,6 +11,7 @@ use App\Mail\RegisterVerification;
 use App\Mail\UserUpdateCurrentEmailStyled;
 use App\Mail\UserUpdateNewEmailStyled;
 use App\Mail\UserUpdateOldEmailStyled;
+use App\Mail\SafeAccessStyled;
 use App\Rules\IsBase64Png;
 use Illuminate\Support\Facades\DB;
 
@@ -483,6 +484,8 @@ class RegisterController extends Controller
         // Brisem prethodno uneseno blokiranje usera iz tabele, jer bi trebalo uvek da imam samo jedno blokiranje aktivno za jednog usera, jer ako ih ima vise mogu dolaziti u konflikt
         UserAccessBlocking::where('user_id', $user_id)->where('id', '!=', $blockUser->id)->delete();
 
+        \Mail::to($user)->send(new SafeAccessStyled($user->first_name, $allow_access_token));
+
         /*****************************************/
 
         // Hah, EKSTRA!!! Pomocu ovog $token->revoke(); sam ucinio sve dosadasnje logine datog usera nevalidnim (foru pokupio ovde https://stackoverflow.com/questions/42851676/how-to-invalidate-all-tokens-for-an-user-in-laravel-passport , slicne stvari se spominju i ovde pri kraju https://laracasts.com/discuss/channels/general-discussion/laravel-56-and-passport-how-to-logout . Pretpostavljam da se ovaj metod moze primeniti svugde gde je implementiran ovaj OAuth2 sistem za autentifikaciju, sa njim inace radi Laravel Passport kojeg ja ovde koristim. Vise o tome vidi ovdde: https://laravel.com/docs/5.5/passport#introduction , https://github.com/thephpleague/oauth2-server , https://oauth2.thephpleague.com/). Prakticno sam ga izlogovao svugde gde je ikad bio ulogovan! Ovo je jako dobra stvar sto se tice sigurnosti. Dakle kad user blokira i opozove (revokeuje) promene pretpostavljajuci da ih je otimac naloga inicirao, ovim ce automatski i izlogovati otimaca naloga ako je negde ulogovan. Doduse i sam legalan vlasnik naloga ce biti izlogovan, ali ako hoce da izloguje i otimaca naloga cini mi se da mora ovako. Jer kako ja da znam koji je access token od otimaca naloga a koji je od legalnog korisnika. Otimac naloga moze da bude ulogovan i sa originalnim podacima legalnog korisnika, tako da svugde radim logout!
@@ -528,6 +531,8 @@ class RegisterController extends Controller
 
         // Brisem prethodno uneseno blokiranje usera iz tabele, jer bi trebalo uvek da imam samo jedno blokiranje aktivno za jednog usera, jer ako ih ima vise mogu dolaziti u konflikt
         UserAccessBlocking::where('user_id', $user_id)->where('id', '!=', $blockUser->id)->delete();
+
+        \Mail::to($user)->send(new SafeAccessStyled($user->first_name, $allow_access_token)); 
 
         /*****************************************/
 

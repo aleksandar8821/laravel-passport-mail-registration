@@ -8,6 +8,7 @@ use App\UserAccessBlocking;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use App\Mail\PasswordResetStyled;
+use App\Mail\SafePasswordResetStyled;
 
 class PasswordResetController extends Controller
 {
@@ -56,8 +57,12 @@ class PasswordResetController extends Controller
 		$user_first_name = $user->first_name;
 		$token = str_random(40).time(); //str_random() preporucen ovde https://laracasts.com/discuss/channels/laravel/implementing-reset-password-feature-without-makeauth , ipak dodajem time da ne dodje do duplikata
 
-		\Mail::to($email)->send(new PasswordResetStyled($email, $user_first_name, $token));
-
+        if($userBlocked && $request->allow_access_token === $userBlocked->allow_access_token){
+            \Mail::to($email)->send(new SafePasswordResetStyled($email, $user_first_name, $token, $request->allow_access_token));
+        }else{
+    		\Mail::to($email)->send(new PasswordResetStyled($email, $user_first_name, $token));
+            
+        }
 
 
 		// koristio princip https://laravel.com/docs/5.5/queries#inserts

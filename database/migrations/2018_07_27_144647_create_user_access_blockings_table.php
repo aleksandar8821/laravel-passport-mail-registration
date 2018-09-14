@@ -18,9 +18,9 @@ class CreateUserAccessBlockingsTable extends Migration
             $table->increments('id');
             $table->unsignedInteger('user_id');
             $table->foreign('user_id')->references('id')->on('users')->onDelete('cascade');
-            $table->string('allow_access_token');
+            $table->string('allow_access_token')->nullable();
             $table->timestamps();
-            $table->timestamp('expires_at');
+            $table->timestamp('expires_at')->nullable();
         });
     }
 

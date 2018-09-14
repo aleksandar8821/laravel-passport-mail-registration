@@ -12,11 +12,16 @@ use App\Mail\UserUpdateCurrentEmailStyled;
 use App\Mail\UserUpdateNewEmailStyled;
 use App\Mail\UserUpdateOldEmailStyled;
 use App\Mail\SafeAccessStyled;
+use App\My_custom_files\userAccessBlockingTrait;
 use App\Rules\IsBase64Png;
 use Illuminate\Support\Facades\DB;
 
 class RegisterController extends Controller
 {
+
+    use userAccessBlockingTrait;
+
+
     public function register(Request $request){
 
         // Laravel prilikom ajax zahteva automatski vraca greske u json formatu, a prilikom regularnog http zahteva pravi redirekciju msm na home stranicu i tamo bi trebalo da su ti dostupni errori u json formatu!
@@ -392,7 +397,7 @@ class RegisterController extends Controller
 
                     // Ukoliko se updateuje email ili sifra (koji su oba login credentials, tj sluze za login) korisnik se svugde automatski logoutuje 
                     if($user_update_row->email || $user_update_row->password){
-                        // Ovo logoutuje usera svugde gde je ulogovan, detaljnija objasnjenja ovoga imas ovde u funkciji blockRevokeChanges
+                        // Ovo logoutuje usera svugde gde je ulogovan, detaljnija objasnjenja ovoga imas ovde u funkciji blockUserWithSafeAccess u traitu userAccessBlockingTrait
                         $userTokens = $user->tokens;
 
                         foreach($userTokens as $token) {
@@ -471,29 +476,9 @@ class RegisterController extends Controller
             
         }
 
-        /****BLOKIRAM USERU PRISTUP APLIKACIJI****/
-        $blockUser = new UserAccessBlocking;
-
-        $blockUser->user_id = $user_id;
-        $allow_access_token = $this->get_clean_microtimestamp_string().str_random(30);
-        $blockUser->allow_access_token = $allow_access_token;
-        $blockUser->expires_at = now()->addHours(48);
-
-        $blockUser->save();
-
-        // Brisem prethodno uneseno blokiranje usera iz tabele, jer bi trebalo uvek da imam samo jedno blokiranje aktivno za jednog usera, jer ako ih ima vise mogu dolaziti u konflikt
-        UserAccessBlocking::where('user_id', $user_id)->where('id', '!=', $blockUser->id)->delete();
-
-        \Mail::to($user)->send(new SafeAccessStyled($user->first_name, $allow_access_token));
-
-        /*****************************************/
-
-        // Hah, EKSTRA!!! Pomocu ovog $token->revoke(); sam ucinio sve dosadasnje logine datog usera nevalidnim (foru pokupio ovde https://stackoverflow.com/questions/42851676/how-to-invalidate-all-tokens-for-an-user-in-laravel-passport , slicne stvari se spominju i ovde pri kraju https://laracasts.com/discuss/channels/general-discussion/laravel-56-and-passport-how-to-logout . Pretpostavljam da se ovaj metod moze primeniti svugde gde je implementiran ovaj OAuth2 sistem za autentifikaciju, sa njim inace radi Laravel Passport kojeg ja ovde koristim. Vise o tome vidi ovdde: https://laravel.com/docs/5.5/passport#introduction , https://github.com/thephpleague/oauth2-server , https://oauth2.thephpleague.com/). Prakticno sam ga izlogovao svugde gde je ikad bio ulogovan! Ovo je jako dobra stvar sto se tice sigurnosti. Dakle kad user blokira i opozove (revokeuje) promene pretpostavljajuci da ih je otimac naloga inicirao, ovim ce automatski i izlogovati otimaca naloga ako je negde ulogovan. Doduse i sam legalan vlasnik naloga ce biti izlogovan, ali ako hoce da izloguje i otimaca naloga cini mi se da mora ovako. Jer kako ja da znam koji je access token od otimaca naloga a koji je od legalnog korisnika. Otimac naloga moze da bude ulogovan i sa originalnim podacima legalnog korisnika, tako da svugde radim logout!
-        $userTokens = $user->tokens;
-
-        foreach($userTokens as $token) {
-            $token->revoke();   
-        }
+        //blokiram useru pristup aplikaciji u narednih 48 sati i logoutujem ga svugde gde je dosad bio ulogovan da bi izlogovao i zlonamernog korisnika koji mu je nelegalno pristupio nalogu. Originalnom korisniku saljem mail sa allow access tokenom da bi preko maila mogao da pristupi nalogu - tako da moze pristupiti samo originalni korisnik koji je vlasnik emaila, a ovaj koji mu zloupotrebljava nalog ne moze! Sve to radim preko metode iz traita userAccessBlockingTrait:
+        $this->blockUserWithSafeAccess($user, 48);
+        
         
         // Po mom misljenju nema potrebe ponistavati password resete koje je otimac naloga eventualno pravio, jer su one uvek vezane za email (na osnovu emaila iz password reset requesta ti selektujes usera kojem ces promenuti sifru), a ti ovde svakako vracas email na staru vrednost, tako da se reset ne moze izvrsiti.
 
@@ -507,7 +492,7 @@ class RegisterController extends Controller
     public function block_request_and_account_logout_user(Request $request)
     {
         $user_id = $request->user_id;
-        $block_request_token = $request->block_request_revoke_changes_token;
+        $block_request_token = $request->block_request_token;
 
         $request_for_blocking = UserUpdate::where(['user_id'=>$user_id, 'block_request_token'=>$block_request_token])->first();
 
@@ -519,31 +504,8 @@ class RegisterController extends Controller
 
         $user = User::find($user_id);
 
-        /****BLOKIRAM USERU PRISTUP APLIKACIJI****/
-        $blockUser = new UserAccessBlocking;
-
-        $blockUser->user_id = $user_id;
-        $allow_access_token = $this->get_clean_microtimestamp_string().str_random(30);
-        $blockUser->allow_access_token = $allow_access_token;
-        $blockUser->expires_at = now()->addHours(48);
-
-        $blockUser->save();
-
-        // Brisem prethodno uneseno blokiranje usera iz tabele, jer bi trebalo uvek da imam samo jedno blokiranje aktivno za jednog usera, jer ako ih ima vise mogu dolaziti u konflikt
-        UserAccessBlocking::where('user_id', $user_id)->where('id', '!=', $blockUser->id)->delete();
-
-        \Mail::to($user)->send(new SafeAccessStyled($user->first_name, $allow_access_token)); 
-
-        /*****************************************/
-
-
-        // Ovo logoutuje usera svugde gde je ulogovan, detaljnija objasnjenja ovoga imas ovde u funkciji blockRevokeChanges
-        $userTokens = $user->tokens;
-
-        foreach($userTokens as $token) {
-            $token->revoke();   
-        }
-
+        //blokiram useru pristup aplikaciji u narednih 48 sati i logoutujem ga svugde gde je dosad bio ulogovan da bi izlogovao i zlonamernog korisnika koji mu je nelegalno pristupio nalogu. Originalnom korisniku saljem mail sa allow access tokenom da bi preko maila mogao da pristupi nalogu - tako da moze pristupiti samo originalni korisnik koji je vlasnik emaila, a ovaj koji mu zloupotrebljava nalog ne moze! Sve to radim preko metode iz traita userAccessBlockingTrait:
+        $this->blockUserWithSafeAccess($user, 48);
 
 
         return response()->json(["message" => "force logout"], 200);
@@ -551,11 +513,6 @@ class RegisterController extends Controller
         // return $loggedUser;
     }
 
-
-    public function invalidateAllUsersLogins($user_id)
-    {
-        # code...
-    }
 
 
     public function verify(Request $request)

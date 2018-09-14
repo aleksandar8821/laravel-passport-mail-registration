@@ -4,7 +4,8 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\User;
-use App\UserAccessBlocking;
+// use App\UserAccessBlocking;
+use App\My_custom_files\userAccessBlockingTrait;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use App\Mail\PasswordResetStyled;
@@ -12,6 +13,9 @@ use App\Mail\SafePasswordResetStyled;
 
 class PasswordResetController extends Controller
 {
+
+    use userAccessBlockingTrait;
+
     public function forgotPasswordRequest(Request $request)
     {
 
@@ -22,32 +26,12 @@ class PasswordResetController extends Controller
 
 		$email = $request->email;
 		$user = User::where('email', $email)->firstOrFail(); //s ovim ga jos jednom prakticno proveravam, mada i nema potrebe jer je gore vec jednom provereno, al, paranoicno, za svaki slucaj :)
-
-        /***KOD ZA BLOKIRANJE PRISTUPA BLOKIRANIM USERIMA***/
-
-        $userBlocked = UserAccessBlocking::where('user_id', $user->id)->where('expires_at', '>', now())->first();
-
-        if($userBlocked){
-            if ($request->allow_access_token !== $userBlocked->allow_access_token) {
-
-                if($userBlocked->expires_at){
-                    $unblockPeriod = Carbon::now()->diffInHours(Carbon::createFromFormat('Y-m-d H:i:s', $userBlocked->expires_at));
-
-                    if($unblockPeriod > 1) {
-                        return response()->json(['error'=>'Your account is blocked, and you will not be able to access it for next '.$unblockPeriod.' hours!'], 403);
-                    }else{
-                        $unblockPeriod = Carbon::now()->diffInMinutes(Carbon::createFromFormat('Y-m-d H:i:s', $userBlocked->expires_at));
-                        return response()->json(['error'=>'Your account is blocked, and you will not be able to access it for next '.$unblockPeriod.' minutes!'], 403);
-                    }
-
-                }else{
-                    return response()->json(['error'=>'Your account is blocked!'], 403);
-                }
-                
-            }
+        
+        // Proveravam dal je user blokiran pomocu koda iz traita userAccessBlockingTrait
+        $response = $this->check_if_user_is_blocked($request, $user);
+        if ($response) {
+            return response()->json(['error' => $response], 403);
         }
-
-        /****************************************************/
 
         // Onemogucavam da korisnici koji nisu verifikovali svoj account da menjaju sifru, mada se ovo mozda i moze dopustiti... Nisam siguran, al ajd za svaki slucaj da uradim i to...
         if($user->verified === 0){
@@ -57,7 +41,8 @@ class PasswordResetController extends Controller
 		$user_first_name = $user->first_name;
 		$token = str_random(40).time(); //str_random() preporucen ovde https://laracasts.com/discuss/channels/laravel/implementing-reset-password-feature-without-makeauth , ipak dodajem time da ne dodje do duplikata
 
-        if($userBlocked && $request->allow_access_token === $userBlocked->allow_access_token){
+        // Ovaj uslov vucem iz traita userAccessBlockingTrait
+        if($this->blockedUserAccessAllowed){
             \Mail::to($email)->send(new SafePasswordResetStyled($email, $user_first_name, $token, $request->allow_access_token));
         }else{
     		\Mail::to($email)->send(new PasswordResetStyled($email, $user_first_name, $token));
@@ -90,32 +75,12 @@ class PasswordResetController extends Controller
         ]);
 
         $user = User::where('email', $request->email)->firstOrFail();
-
-        /***KOD ZA BLOKIRANJE PRISTUPA BLOKIRANIM USERIMA***/
-
-        $userBlocked = UserAccessBlocking::where('user_id', $user->id)->where('expires_at', '>', now())->first();
-
-        if($userBlocked){
-            if ($request->allow_access_token !== $userBlocked->allow_access_token) {
-
-                if($userBlocked->expires_at){
-                    $unblockPeriod = Carbon::now()->diffInHours(Carbon::createFromFormat('Y-m-d H:i:s', $userBlocked->expires_at));
-
-                    if($unblockPeriod > 1) {
-                        return response()->json(['error'=>'Your account is blocked, and you will not be able to access it for next '.$unblockPeriod.' hours!'], 403);
-                    }else{
-                        $unblockPeriod = Carbon::now()->diffInMinutes(Carbon::createFromFormat('Y-m-d H:i:s', $userBlocked->expires_at));
-                        return response()->json(['error'=>'Your account is blocked, and you will not be able to access it for next '.$unblockPeriod.' minutes!'], 403);
-                    }
-                    
-                }else{
-                    return response()->json(['error'=>'Your account is blocked!'], 403);
-                }
-                
-            }
+        
+        // Proveravam dal je user blokiran pomocu koda iz traita userAccessBlockingTrait
+        $response = $this->check_if_user_is_blocked($request, $user);
+        if ($response) {
+            return response()->json(['error' => $response], 403);
         }
-
-        /****************************************************/
 
         // Ponovo (mozda bespotrebno) proveravam da li je user koji hoce da menja sifru verifikovao svoj nalog prilikom registracije, pa ako nije brisem mu i zahtev za promenu sifre (mada sam ga gore u funkciji forgotPasswordRequest onemogucio i da ga unese ako nije verifikovan, al ajd) i stopiram promenu sifre
         if($user->verified === 0){
